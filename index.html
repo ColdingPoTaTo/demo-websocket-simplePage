@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Socket.io Chat Rooms</title>
+    <style>
+      .message-pane {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-top: 10px;
+        height: 200px;
+        overflow-y: scroll;
+      }
+      .mx-2 {
+        margin-left: 10px;
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Socket.io Chat Rooms</h1>
+    <div>
+      <input type="text" id="authorization" placeholder="Type your authorization" />
+      <button type="button" id="btnConnect">建立連線</button>
+      <br />
+      <input type="text" id="taskId" placeholder="Type your taskId" />
+      <button type="button" id="btnCreateRoom">創建房間</button>
+    </div>
+    <div id="roomSection" style="display: flex"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.0/socket.io.js"></script>
+    <script>
+      // const URL = 'http://localhost:3000'
+      const URL = 'https://superhandy-frontend-fork.herokuapp.com'
+      let socket = io(URL, {
+        transports: ['websocket'],
+        auth: { Authorization: `` }
+      })
+      // initial setup
+      setUpEventHandlers()
+      const messagePanes = {}
+
+      //使用taskId創建房間
+      $('#btnCreateRoom').on('click', function () {
+        const taskId = $('#taskId').val()
+        if (taskId === '' || messagePanes[`${taskId}`]) return
+        $('#roomSection').append(`
+            <div class="mx-2 chatRoom" data-taskid="${taskId}">
+              <h2>Room ${taskId}</h2>
+              <div class="message-pane"></div>
+              <input type="text" placeholder="Type your message" />
+              <button class="btn-send">Send</button>
+            </div>
+          `)
+        messagePanes[`${taskId}`] = []
+      })
+
+      //使用token建立連線
+      $('#btnConnect').click(function () {
+        const authorization = $('#authorization').val()
+        if (authorization === '') {
+          alert('請填寫授權')
+          return
+        }
+        reConnectWebSocket(authorization)
+      })
+
+      function setUpEventHandlers() {
+        //監聽message事件(接收websocket訊息)
+        socket.on('message', (data) => {
+          console.log('check point 收到甚麼message訊息:', data)
+          const { message, taskId, role, createAt } = data
+          if (!messagePanes[taskId]) return // 若messagePanes[taskId]不存在，則返回
+          messagePanes[taskId].push(data)
+          updateMessagePane(taskId)
+        })
+
+        //監聽connectStatus事件(接收websocket訊息)
+        socket.on('connectStatus', (data) => {
+          console.log('check point 收到甚麼status訊息:', data)
+        })
+        //監聽errorMsg事件(接收websocket訊息)
+        socket.on('errorMsg', (data) => {
+          console.log('check point 收到甚麼errorMsg訊息:', data)
+        })
+      }
+
+      //監聽傳送按鈕(發送websocket訊息)
+      $('#roomSection').on('click', 'button.btn-send', function () {
+        const taskId = $(this).parent().data('taskid')
+        const message = $(this).prev().val()
+        console.log('check point 傳送訊息:', message, taskId)
+        if (message === '') return
+        socket.emit('message', { taskId, message })
+        $(this).prev().val('')
+      })
+
+      function reConnectWebSocket(authorization) {
+        //關閉舊的連線
+        socket.close()
+        //建立新的連線
+        socket = io(URL, {
+          transports: ['websocket'],
+          auth: { Authorization: `Bearer ${authorization}` }
+        })
+        setUpEventHandlers()
+      }
+
+      function updateMessagePane(taskId) {
+        const messagePane = $(`div[data-taskid="${taskId}"]`).find('.message-pane')
+        messagePane.html('')
+        let contents = []
+        messagePanes[taskId].forEach((messageData) => {
+          const { message, taskId, role, createAt } = messageData
+          const content = `<div>${role}: ${message} ${createAt}</div>`
+          contents.push(content)
+        })
+        messagePane.html(contents.join(''))
+      }
+    </script>
+  </body>
+</html>
